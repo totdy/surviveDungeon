@@ -42,8 +42,20 @@
 <div id="lvl"></div>
 <div id="mes"></div>
 <div id="blood"></div>
-<button onclick="play()" class="menuButton" id="sound" style="display:none;"><i id="mute" class="fa fa-volume-up"></i></button>
-
+<button onclick="window.location.href = 'menu.php';" class="menuButton" id="menu"><i class="fa fa-bars"></i> Menu</button>
+<?php
+	session_start();
+	if(!isset($_SESSION["idp"])){
+		echo"<center><h1>Only for registered players.</h1><center>";
+		echo'<script type="text/javascript">	document.getElementById("blocker").style.display = "none";</script>';
+		exit;
+	}
+	include ("ligabd.php");
+	
+	$lista="select * from players where id='".$_SESSION["idp"]."'";
+	$faz_lista=mysqli_query($ligabd,$lista);
+	$registos=mysqli_fetch_array($faz_lista);
+?>
 <script type="text/javascript">	
 			//fps counter
 			var lastCalledTime;
@@ -56,11 +68,10 @@
 			var camera, scene, renderer;
 			var geometry, material, mesh;
 			var controls;
-			var ElementsData,bosslevel;
+			var ElementsData,lastboss;
 			var objects = [];
 			var chests;
 			var flag_hp;
-			var audio;
 			//blocker 'Click to play'
 			var blocker = document.getElementById( 'blocker' );
 			var instructions = document.getElementById( 'instructions' );
@@ -100,17 +111,14 @@
 				instructions.innerHTML = 'Your browser doesn\'t seem to support Pointer Lock API';
 			}
 			//GLOBAL Var list
-			var hp=Math.round(localStorage.getItem("hp"),0);
-			var speed=Math.round(localStorage.getItem("speed"),0);
-			var gl=Math.round(localStorage.getItem("gold"),0);
-			var nelem=Math.round(localStorage.getItem("lvl"),0);
-			var tmpbosslvl = Math.round(localStorage.getItem("boss"),0);
-			if(tmpbosslvl==0){
-				bosslevel=1;
-			}else{
-				bosslevel=0;
-			}
-			var dlevel=0;
+			var hp=<?php echo json_encode($registos["health"]);?>;
+			hp = Math.round(hp,0);
+			var speed=<?php echo json_encode($registos["speed"]);?>;
+			speed = Math.round(speed,0);
+			var gl=<?php echo json_encode($registos["gold"]);?>;
+			gl = Math.round(gl,0);
+			var nelem=<?php echo json_encode($registos["level"]);?>;
+			nelem=Math.round(nelem,0);
 			var nenemy;
 			var t=30;
 			var tl;
@@ -132,62 +140,29 @@
 				document.getElementById("blood").style.display = "block";
 				var bs = setTimeout(function(){document.getElementById("blood").style.display = "none";}, 200);
 			}
-			function play(){
-				if(audio.paused){
-					audio.play();
-					document.getElementById("mute").classList.remove('fa-volume-off');
-					document.getElementById("mute").classList.add('fa-volume-up');
-				}else{
-					audio.pause();
-					document.getElementById("mute").classList.remove('fa-volume-up');
-					document.getElementById("mute").classList.add('fa-volume-off');
-				}
-				
-			}			
-			function c_once(fn, context) { 
-				var result;
-				return function() { 
-					if (fn) {
-						result = fn.apply(context || this, arguments);
-						fn = null;
-					}
-					return result;
-				};
-			}
-			function upd_data(){				
-				localStorage.setItem("lvl",dlevel);
-				if(bosslevel==1){
-					localStorage.setItem("boss",5);
-				}else{
-					localStorage.setItem("boss",--tmpbosslvl);
-				}				
-				window.location.href = "game.html";
-			}
-			var once_upd = c_once(upd_data);
-			
 			function init() {
 				//TEXTURES
 				//fire texture 
 				var fireTexture = new THREE.ImageUtils.loadTexture( 'texture/fire.png' );
 					// a texture with 10 frames arranged horizontally, display each for 75 millisec
 					annie4 = new TextureAnimator( fireTexture, 8, 1, 8, 150 ); 
-					var fireMaterial = new THREE.MeshLambertMaterial( { transparent:true,map: fireTexture , side:THREE.DoubleSide } );
+					var fireMaterial = new THREE.MeshPhongMaterial( { transparent:true,map: fireTexture , side:THREE.DoubleSide } );
 				//boss FIREBALL texture 
 				var fireballTexture = new THREE.ImageUtils.loadTexture( 'texture/fireball.png' );
 					// a texture with 10 frames arranged horizontally, display each for 75 millisec
 					annie3 = new TextureAnimator( fireballTexture, 4, 1, 4, 150 ); 
-					var fireballMaterial = new THREE.MeshLambertMaterial( { transparent:true,map: fireballTexture , side:THREE.DoubleSide } );
+					var fireballMaterial = new THREE.MeshPhongMaterial( { transparent:true,map: fireballTexture , side:THREE.DoubleSide } );
 				//boss anim texture 
 				var bossTexture = new THREE.ImageUtils.loadTexture( 'texture/bossanim.png' );
 					// a texture with 10 frames arranged horizontally, display each for 75 millisec
 					annie2 = new TextureAnimator( bossTexture, 11.01, 1, 11, 200 ); 
-					var bossMaterial = new THREE.MeshLambertMaterial( { transparent:true,map: bossTexture , side:THREE.DoubleSide } );
+					var bossMaterial = new THREE.MeshPhongMaterial( { transparent:true,map: bossTexture , side:THREE.DoubleSide } );
 					
 				//enemy anim texture
 					var runnerTexture = new THREE.ImageUtils.loadTexture( 'texture/enemyanim.png' );
 					// a texture with 10 frames arranged horizontally, display each for 75 millisec
 					annie = new TextureAnimator( runnerTexture, 4, 1.01, 4, 150 ); 
-					var runnerMaterial = new THREE.MeshLambertMaterial( { transparent:true,map: runnerTexture } );
+					var runnerMaterial = new THREE.MeshPhongMaterial( { transparent:true,map: runnerTexture } );
 				//LOADER
 				var textureLoader =new THREE.TextureLoader();
 				//wall texture
@@ -291,26 +266,27 @@
 				//chest material
 					var cubeMaterialArray = [];
 					// order to add materials: x+,x-,y+,y-,z+,z-
-					cubeMaterialArray.push( new THREE.MeshLambertMaterial( { color: 0xffffff ,map:chestTextureLR} ) );
-					cubeMaterialArray.push( new THREE.MeshLambertMaterial( { color: 0xffffff ,map:chestTextureLR} ) );
-					cubeMaterialArray.push( new THREE.MeshLambertMaterial( { color: 0xffffff ,map:chestTextureTBB} ) );
-					cubeMaterialArray.push( new THREE.MeshLambertMaterial( { color: 0xffffff ,map:chestTextureTBB} ) );
-					cubeMaterialArray.push( new THREE.MeshLambertMaterial( { color: 0xffffff ,map:chestTextureF} ) );
-					cubeMaterialArray.push( new THREE.MeshLambertMaterial( { color: 0xffffff ,map:chestTextureF} ) );
+					cubeMaterialArray.push( new THREE.MeshPhongMaterial( { color: 0xffffff ,map:chestTextureLR} ) );
+					cubeMaterialArray.push( new THREE.MeshPhongMaterial( { color: 0xffffff ,map:chestTextureLR} ) );
+					cubeMaterialArray.push( new THREE.MeshPhongMaterial( { color: 0xffffff ,map:chestTextureTBB} ) );
+					cubeMaterialArray.push( new THREE.MeshPhongMaterial( { color: 0xffffff ,map:chestTextureTBB} ) );
+					cubeMaterialArray.push( new THREE.MeshPhongMaterial( { color: 0xffffff ,map:chestTextureF} ) );
+					cubeMaterialArray.push( new THREE.MeshPhongMaterial( { color: 0xffffff ,map:chestTextureF} ) );
 					var cubeMaterials = new THREE.MultiMaterial( cubeMaterialArray );
-				//lvl				
-				if (bosslevel==0){
-					//audio = new Audio('audio/soundmain.m4a');
-					//audio.play();
-					//audio.loop=true;
-					//audio.volume = 0;
+				//lvl
+				lastboss=<?php 
+				$boss = $registos["level"] - 5;
+				if($boss == $registos["lastboss"]){
+					echo '1';
+				}else{
+					echo '0';
+				};
+				?>;
+				lastboss = Math.round(lastboss,0);
+				if (lastboss==0){
 					normallvl();
 					document.getElementById("mes").innerHTML = "You need to find a key";
 				}else{
-					//audio = new Audio('audio/soundboss.m4a');
-					//audio.play();
-					//audio.loop=true;
-					//audio.volume = 0;
 					hemilight = new THREE.HemisphereLight( 0x993333, 0x993333, 2 );
 					scene.add( hemilight );
 					
@@ -319,14 +295,14 @@
 					ElementsData = nelem;
 					nelem=3;
 
-					boss =new THREE.Mesh(new THREE.PlaneGeometry(20,20),bossMaterial);
-					boss.position.set((((nelem+2)*widthw)/2),10,(((nelem+2)*widthw)/2));
-					scene.add(boss);
-					boss.name="boss";
-					objects.push(boss);
-					
-					//
-					if(bosskill==false){
+						boss =new THREE.Mesh(new THREE.PlaneGeometry(20,20),bossMaterial);
+						boss.position.set((((nelem+2)*widthw)/2),10,(((nelem+2)*widthw)/2));
+						scene.add(boss);
+						boss.name="boss";
+						objects.push(boss);
+						
+						//
+						if(bosskill==false){
 						s = setInterval(spam, 2200);
 						
 						function spam(){
@@ -344,11 +320,11 @@
 								window['ball'+i].position.y = -30;
 							};
 						};
-					};
-					tl = setInterval(tll, 1000);
-					function tll(){
-						t-=1;
-					};	
+						};
+						tl = setInterval(tll, 1000);
+						function tll(){
+							t-=1;
+						};	
 					
 				};
 				//
@@ -366,7 +342,7 @@
 							var pkx=Math.random()*(widthw*(nelem+1))+5;
 							var pkz=Math.random()*(widthw*(nelem+1))+5;		
 							mesh4.rotation.x += -Math.PI/2;
-							if (bosslevel==1){
+							if (lastboss==1){
 								mesh4.position.set(boss.position.x,25,boss.position.z);
 							}else{
 								mesh4.position.set(pkx,7,pkz);
@@ -381,185 +357,186 @@
 					var loader = new THREE.JSONLoader();
 					loader.load('model/wall.json',function (geometry){
 					
-					for(var i=0;i<nelem;i++){				
-						l+=widthw;
-						d=0;
-						for(var j=0;j<nelem+1;j++){
-							var r = Math.floor(Math.random()*10);
-							if(r==1 || r==9){
-								//chest
-								r=0;
-								r = Math.floor(Math.random()*10);
-								if(r==5){
-									mesh7=  new THREE.Mesh(new THREE.CubeGeometry(10,5,5),cubeMaterials);
-									mesh7.position.y = 2.5;
-									mesh7.position.x =  l+(widthw/2)+7;
-									mesh7.rotation.y= Math.PI/2;
-									scene.add(mesh7);
-									mesh7.position.z  = d+(widthw/2)
-									mesh7.name="chest";
-									objects.push(mesh7);
-									chests+=1;
-								};
-								//
-								wall =new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({color:0xffffff,map: wallTexture}));
-								wall.scale.set(5,3,3);
-								wall.castShadow = true;
-								wall.receiveShadow = true;
-								wall.position.z = d+(widthw/2);				
-								wall.position.y = 0;
-								wall.position.x = l+(widthw/2);
-								scene.add(wall);
-								objects.push( wall );
-								d+=widthw;
-							}else{
-								d+=widthw;
-							};
-						};
+					for(var i=0;i<nelem;i++){
+				
+					l+=widthw;
+					d=0;
+					for(var j=0;j<nelem+1;j++){
+					var r = Math.floor(Math.random()*10);
+					if(r==1 || r==9){
+					//chest
+					r=0;
+					r = Math.floor(Math.random()*10);
+					if(r==5){
+						mesh7=  new THREE.Mesh(new THREE.CubeGeometry(10,5,5),cubeMaterials);
+						mesh7.position.y = 2.5;
+						mesh7.position.x =  l+(widthw/2)+7;
+						mesh7.rotation.y= Math.PI/2;
+						scene.add(mesh7);
+						mesh7.position.z  = d+(widthw/2)
+						mesh7.name="chest";
+						objects.push(mesh7);
+						chests+=1;
+					};
+					//
+					wall =new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({color:0xffffff,map: wallTexture}));
+					wall.scale.set(5,3,3);
+					wall.castShadow = true;
+					wall.receiveShadow = true;
+					wall.position.z = d+(widthw/2);				
+					wall.position.y = 0;
+					wall.position.x = l+(widthw/2);
+					scene.add(wall);
+					objects.push( wall );
+					d+=widthw;
+					}else{
+					d+=widthw;
+					};
+					};
 					};
 
 					l=0;
 					d=0;
 					for(var i=0;i<nelem+1;i++){
-						l+=widthw;
-						d=1.5;
-						for(var j=0;j<nelem;j++){
-							var g = Math.floor(Math.random()*10);
-							if( g==1 || g==9){
-								wall2 =new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({color:0xffffff,map: wallTexture}));
-								wall2.scale.set(5,3,3);
-								wall2.castShadow = true;
-								wall2.receiveShadow = true;
-								wall2.position.z = d+widthw;				
-								wall2.position.y = 0;
-								wall2.position.x = l;
-								wall2.rotation.y = Math.PI/2;
-								scene.add(wall2);
-								objects.push( wall2 );
-								d+=widthw;
-							}else{
-								d+=widthw;
-							};
-						};
+					l+=widthw;
+					d=1.5;
+					for(var j=0;j<nelem;j++){
+					var g = Math.floor(Math.random()*10);
+					if( g==1 || g==9){
+					wall2 =new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({color:0xffffff,map: wallTexture}));
+					wall2.scale.set(5,3,3);
+					wall2.castShadow = true;
+					wall2.receiveShadow = true;
+					wall2.position.z = d+widthw;				
+					wall2.position.y = 0;
+					wall2.position.x = l;
+					wall2.rotation.y = Math.PI/2;
+					scene.add(wall2);
+					objects.push( wall2 );
+					d+=widthw;
+					}else{
+					d+=widthw;
 					};
-					});	
-				};
-				l=0;
-				d=-widthw/2;
-				
-				var finish = Math.floor(Math.random()*4)+1;
-				var pos = Math.floor(Math.random()*(nelem+2));				
-				
-				for (var i=0;i<nelem+2;i++){
-					if(finish==1&&pos==i){
-						//finish
-						mesh3 = new THREE.Mesh(new THREE.CubeGeometry(widthw,heightw,widthw),new THREE.MeshLambertMaterial({color:0xaaaaaa , map:finishTexture }));
-						mesh3.position.z = d+(widthw/2);				
-						mesh3.position.y = (heightw/2);
-						mesh3.position.x = -(widthw/2)+.5;
-						scene.add(mesh3);
-						mesh3.name="finish";
-						objects.push(mesh3);
-					}else{
-						mesh2 = new THREE.Mesh(new THREE.CubeGeometry(widthw,heightw,1),new THREE.MeshLambertMaterial({color:0xaaaaaa ,map:wallTexture}));
-						mesh2.position.z = d+(widthw/2)				
-						mesh2.position.y = (heightw/2);
-						mesh2.position.x = 0;
-						mesh2.rotation.y = Math.PI/2;
-						scene.add(mesh2);
-						objects.push( mesh2 );
-						if(bosslevel==1){
-							fire =new THREE.Mesh(new THREE.PlaneGeometry(10,15),fireMaterial);	
-							scene.add(fire);
-							fire.position.set(mesh2.position.x+2,7.5,mesh2.position.z);
-							fire.rotation.y = Math.PI/2;
+					};
+					};
+					});	};
+					l=0;
+					d=-widthw/2;
+					
+					var finish = Math.floor(Math.random()*4)+1;
+					var pos = Math.floor(Math.random()*(nelem+2));
+					
+					
+					for (var i=0;i<nelem+2;i++){
+						if(finish==1&&pos==i){
+							//finish
+							mesh3 = new THREE.Mesh(new THREE.CubeGeometry(widthw,heightw,widthw),new THREE.MeshLambertMaterial({color:0xaaaaaa , map:finishTexture }));
+							mesh3.position.z = d+(widthw/2);				
+							mesh3.position.y = (heightw/2);
+							mesh3.position.x = -(widthw/2)+.5;
+							scene.add(mesh3);
+							mesh3.name="finish";
+							objects.push(mesh3);
+						}else{
+							mesh2 = new THREE.Mesh(new THREE.CubeGeometry(widthw,heightw,1),new THREE.MeshLambertMaterial({color:0xaaaaaa ,map:wallTexture}));
+							mesh2.position.z = d+(widthw/2)				
+							mesh2.position.y = (heightw/2);
+							mesh2.position.x = 0;
+							mesh2.rotation.y = Math.PI/2;
+							scene.add(mesh2);
+							objects.push( mesh2 );
+							if(lastboss==1){
+								fire =new THREE.Mesh(new THREE.PlaneGeometry(10,15),fireMaterial);	
+								scene.add(fire);
+								fire.position.set(mesh2.position.x+2,7.5,mesh2.position.z);
+								fire.rotation.y = Math.PI/2;
+							}
 						}
-					}
+						d+=widthw;
+					};
+					
+					d=-widthw/2;
+					for (var i=0;i<nelem+2;i++){
+						if(finish==2&&pos==i){
+							//finish
+							mesh3 = new THREE.Mesh(new THREE.CubeGeometry(widthw,heightw,widthw),new THREE.MeshLambertMaterial({color:0xffffff , map:finishTexture }));
+							mesh3.position.z = d+(widthw/2);				
+							mesh3.position.y = (heightw/2);
+							mesh3.position.x = (widthw*(nelem+2))+(widthw/2)-.5;
+							scene.add(mesh3);
+							mesh3.name="finish";
+							objects.push(mesh3);
+						}else{
+							mesh2 = new THREE.Mesh(new THREE.CubeGeometry(widthw,heightw,1),new THREE.MeshLambertMaterial({color:0xffffff ,map:wallTexture}));
+							mesh2.position.z = d+(widthw/2);				
+							mesh2.position.y = (heightw/2);
+							mesh2.position.x = widthw*(nelem+2);
+							mesh2.rotation.y = Math.PI/2;
+							scene.add(mesh2);
+							objects.push( mesh2 );
+							if(lastboss==1){
+								fire =new THREE.Mesh(new THREE.PlaneGeometry(10,15),fireMaterial);	
+								scene.add(fire);
+								fire.position.set(mesh2.position.x-2,7.5,mesh2.position.z);
+								fire.rotation.y = Math.PI/2;
+							}
+						}
+						d+=widthw;
+					};
+		
+					d=0;
+					for(var i=0;i<nelem+2;i++){
+						if(finish==3&&pos==i){
+							//finish
+							mesh3 = new THREE.Mesh(new THREE.CubeGeometry(widthw,heightw,widthw),new THREE.MeshLambertMaterial({color:0xffffff , map:finishTexture }));
+							mesh3.position.z = (widthw*(nelem+1.5))+(widthw/2)-.5;				
+							mesh3.position.y = (heightw/2);
+							mesh3.position.x = d+(widthw/2);
+							scene.add(mesh3);
+							mesh3.name="finish";
+							objects.push(mesh3);
+						}else{
+							mesh2 = new THREE.Mesh(new THREE.CubeGeometry(widthw,heightw,1),new THREE.MeshLambertMaterial({color:0xffffff ,map:wallTexture}));
+							mesh2.position.z = widthw*(nelem+1.5);				
+							mesh2.position.y = (heightw/2);
+							mesh2.position.x = d+(widthw/2);
+							scene.add(mesh2);
+							objects.push( mesh2 );
+							if(lastboss==1){
+								fire =new THREE.Mesh(new THREE.PlaneGeometry(10,15),fireMaterial);	
+								scene.add(fire);
+								fire.position.set(mesh2.position.x,7.5,mesh2.position.z-2);
+							}
+						}
 					d+=widthw;
-				};
-				
-				d=-widthw/2;
-				for (var i=0;i<nelem+2;i++){
-					if(finish==2&&pos==i){
-						//finish
-						mesh3 = new THREE.Mesh(new THREE.CubeGeometry(widthw,heightw,widthw),new THREE.MeshLambertMaterial({color:0xffffff , map:finishTexture }));
-						mesh3.position.z = d+(widthw/2);				
-						mesh3.position.y = (heightw/2);
-						mesh3.position.x = (widthw*(nelem+2))+(widthw/2)-.5;
-						scene.add(mesh3);
-						mesh3.name="finish";
-						objects.push(mesh3);
-					}else{
-						mesh2 = new THREE.Mesh(new THREE.CubeGeometry(widthw,heightw,1),new THREE.MeshLambertMaterial({color:0xffffff ,map:wallTexture}));
-						mesh2.position.z = d+(widthw/2);				
-						mesh2.position.y = (heightw/2);
-						mesh2.position.x = widthw*(nelem+2);
-						mesh2.rotation.y = Math.PI/2;
-						scene.add(mesh2);
-						objects.push( mesh2 );
-						if(bosslevel==1){
-							fire =new THREE.Mesh(new THREE.PlaneGeometry(10,15),fireMaterial);	
-							scene.add(fire);
-							fire.position.set(mesh2.position.x-2,7.5,mesh2.position.z);
-							fire.rotation.y = Math.PI/2;
-						}
-					}
-					d+=widthw;
-				};
-	
-				d=0;
-				for(var i=0;i<nelem+2;i++){
-					if(finish==3&&pos==i){
-						//finish
-						mesh3 = new THREE.Mesh(new THREE.CubeGeometry(widthw,heightw,widthw),new THREE.MeshLambertMaterial({color:0xffffff , map:finishTexture }));
-						mesh3.position.z = (widthw*(nelem+1.5))+(widthw/2)-.5;				
-						mesh3.position.y = (heightw/2);
-						mesh3.position.x = d+(widthw/2);
-						scene.add(mesh3);
-						mesh3.name="finish";
-						objects.push(mesh3);
-					}else{
-						mesh2 = new THREE.Mesh(new THREE.CubeGeometry(widthw,heightw,1),new THREE.MeshLambertMaterial({color:0xffffff ,map:wallTexture}));
-						mesh2.position.z = widthw*(nelem+1.5);				
-						mesh2.position.y = (heightw/2);
-						mesh2.position.x = d+(widthw/2);
-						scene.add(mesh2);
-						objects.push( mesh2 );
-						if(bosslevel==1){
-							fire =new THREE.Mesh(new THREE.PlaneGeometry(10,15),fireMaterial);	
-							scene.add(fire);
-							fire.position.set(mesh2.position.x,7.5,mesh2.position.z-2);
-						}
-					}
-				d+=widthw;
-				};
+					};
 
-				d=0;
-				for(var i=0;i<nelem+2;i++){
-					if(finish==4&&pos==i){
-						//finish
-						mesh3 = new THREE.Mesh(new THREE.CubeGeometry(widthw,heightw,widthw),new THREE.MeshLambertMaterial({color:0xffffff , map:finishTexture }));
-						mesh3.position.z = -widthw/2-(widthw/2)+.5;				
-						mesh3.position.y = (heightw/2);
-						mesh3.position.x = d+(widthw/2);
-						scene.add(mesh3);
-						mesh3.name="finish";
-						objects.push(mesh3);
-					}else{
-						mesh2 = new THREE.Mesh(new THREE.CubeGeometry(widthw,heightw,1),new THREE.MeshLambertMaterial({color:0xffffff ,map:wallTexture}));
-						mesh2.position.z = -widthw/2;				
-						mesh2.position.y = (heightw/2);
-						mesh2.position.x = d+(widthw/2);
-						scene.add(mesh2);
-						objects.push( mesh2 );
-						if(bosslevel==1){
-							fire =new THREE.Mesh(new THREE.PlaneGeometry(10,15),fireMaterial);	
-							scene.add(fire);
-							fire.position.set(mesh2.position.x,7.5,mesh2.position.z+2);
+					d=0;
+					for(var i=0;i<nelem+2;i++){
+						if(finish==4&&pos==i){
+							//finish
+							mesh3 = new THREE.Mesh(new THREE.CubeGeometry(widthw,heightw,widthw),new THREE.MeshLambertMaterial({color:0xffffff , map:finishTexture }));
+							mesh3.position.z = -widthw/2-(widthw/2)+.5;				
+							mesh3.position.y = (heightw/2);
+							mesh3.position.x = d+(widthw/2);
+							scene.add(mesh3);
+							mesh3.name="finish";
+							objects.push(mesh3);
+						}else{
+							mesh2 = new THREE.Mesh(new THREE.CubeGeometry(widthw,heightw,1),new THREE.MeshLambertMaterial({color:0xffffff ,map:wallTexture}));
+							mesh2.position.z = -widthw/2;				
+							mesh2.position.y = (heightw/2);
+							mesh2.position.x = d+(widthw/2);
+							scene.add(mesh2);
+							objects.push( mesh2 );
+							if(lastboss==1){
+								fire =new THREE.Mesh(new THREE.PlaneGeometry(10,15),fireMaterial);	
+								scene.add(fire);
+								fire.position.set(mesh2.position.x,7.5,mesh2.position.z+2);
+							}
 						}
-					}
-				d+=widthw;
-				};
+					d+=widthw;
+					};
 				
 						
 				// floor
@@ -575,7 +552,7 @@
 				mesh = new THREE.Mesh( geometry, new THREE.MeshPhongMaterial({color:0xffffff ,map:bottTexture}) );	
 				mesh.position.set( (widthw*(nelem+2))/2,heightw,(widthw*(nelem+1))/2);
 				scene.add(mesh);
-				mesh.receiveShadow = true;
+		mesh.receiveShadow = true;
 				
 				// enemys
 				for(i=0;i<nenemy;i++){
@@ -602,9 +579,12 @@
 				renderer.setSize( window.innerWidth, window.innerHeight );
 				document.body.appendChild( renderer.domElement );
 
+				//
+				
 				window.addEventListener( 'resize', onWindowResize, false );
 				
-				if (bosslevel==1){
+				//
+				if (lastboss==1){
 					document.getElementById("lvl").innerHTML = "LVL :BOSS";
 				}else{
 					document.getElementById("lvl").innerHTML = "LVL :"+nelem;
@@ -644,7 +624,7 @@
 				//
 				document.getElementById("hp").innerHTML = "HP :"+Math.floor(hp);
 				document.getElementById("gl").innerHTML = "GOLD :"+Math.floor(gl);
-				if (bosslevel==1 && t>0)document.getElementById("timer").innerHTML = t;
+				if (lastboss==1 && t>0)document.getElementById("timer").innerHTML = t;
 				//
 				if(t<=0){
 					document.getElementById("mes").innerHTML = "You need to find a key";
@@ -699,23 +679,28 @@
 						if ( collisionResults.length > 0 && collisionResults[0].distance < directionVector.length() ) {
 							if (collisionResults[0].object.name=="key"){
 								keyuse= true;
-								if(bosslevel==0)$("#mes").css('display', 'none');
+								if(lastboss==0)$("#mes").css('display', 'none');
 								scene.remove(mesh4);
-							}else if(collisionResults[0].object.name=="finish" && keyuse==true){
-								controls.getObject().position.z =controls.getObject().position.z -0.2;
-								velocity.x = 0;
-								velocity.z = 0;
-								if(bosslevel==1&&bosskill==true){																		
-									nelem = ElementsData;
-									dlevel=nelem+1;
-									once_upd();									
-								}else{
-																		
-									dlevel=nelem+1;
-									once_upd();																		
-								}
+							}else if(collisionResults[0].object.name=="finish" && keyuse==true <?php 
+															$boss = $registos["level"] - 5;
+															if($boss == $registos["lastboss"]){
+																echo ' && bosskill==true';
+															};
+															?>){
+								//JS ->PHP
+									controls.getObject().position.z =controls.getObject().position.z -0.2;
+									velocity.x = 0;
+									velocity.z = 0;
+									if (lastboss==1){
+										nelem = ElementsData;
+										var dlevel=nelem+1;
+										$.post('updategame.php', {level: dlevel,gold: gl,lb: 1});
+									}else{
+										var dlevel=nelem+1;
+										$.post('updategame.php', {level: dlevel,gold: gl,lb: 0});
+									};
 									
-									
+									window.location.href = "menu.php";
 								//
 							}else if(collisionResults[0].object.name=="chest"){
 								gl =gl+ Math.floor(Math.random()*100);
@@ -759,7 +744,7 @@
 						};
 					}
 					//
-					if ( bosslevel==1 && bosskill==false){
+					if ( lastboss==1 && bosskill==false){
 						boss.rotation.y = controls.getObject().rotation.y;
 						if (typeof ball0 !== 'undefined') {
 							for(i=0;i<8;i++){
